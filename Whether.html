@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weather Now - Full Forecast</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(to right, #83a4d4, #b6fbff);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      background: #fff;
+      padding: 20px;
+      border-radius: 15px;
+      max-width: 900px;
+      width: 100%;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 15px;
+      color: #333;
+    }
+    input, button {
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin: 5px;
+    }
+    button {
+      background: #0077b6;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #023e8a;
+    }
+    .current, .forecast, .hourly {
+      margin-top: 20px;
+    }
+    .temp {
+      font-size: 32px;
+      font-weight: bold;
+    }
+    .desc {
+      font-size: 18px;
+      margin-top: 5px;
+      color: #555;
+    }
+    .forecast-grid, .hourly-grid {
+      display: grid;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .forecast-grid {
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+    .hourly-grid {
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    }
+    .card {
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 10px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+    .icon {
+      font-size: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🌍 Weather Now</h1>
+    <div style="text-align:center;">
+      <input type="text" id="city" placeholder="Enter city">
+      <button onclick="getWeather()">Search</button>
+    </div>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const weatherIcons = {
+      0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+      45: "🌫️", 48: "🌫️",
+      51: "🌦️", 61: "🌧️", 71: "❄️",
+      80: "🌧️", 95: "⛈️"
+    };
+    const weatherCodes = {
+      0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+      45: "Fog", 48: "Rime fog",
+      51: "Light drizzle", 61: "Rain", 71: "Snowfall",
+      80: "Rain showers", 95: "Thunderstorm"
+    };
+
+    async function getWeather() {
+      const city = document.getElementById("city").value.trim();
+      const resultDiv = document.getElementById("result");
+      if (!city) {
+        resultDiv.innerHTML = "<p>Please enter a city name.</p>";
+        return;
+      }
+      try {
+        // Get coordinates
+        const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
+        const geoData = await geoRes.json();
+        if (!geoData.results || geoData.results.length === 0) {
+          resultDiv.innerHTML = "<p>City not found.</p>";
+          return;
+        }
+        const { latitude, longitude, name, country } = geoData.results[0];
+
+        // Get weather data
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,weathercode,relativehumidity_2m,pressure_msl,visibility&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        const current = data.current_weather;
+        const daily = data.daily;
+        const hourly = data.hourly;
+
+        // Current weather
+        let html = `
+          <div class="current">
+            <h2>${name}, ${country}</h2>
+            <p class="temp">${current.temperature}°C ${weatherIcons[current.weathercode] || ""}</p>
+            <p class="desc">${weatherCodes[current.weathercode] || "?"}</p>
+            <p>💨 Wind: ${current.windspeed} km/h</p>
+            <p>🌡 Pressure: ${hourly.pressure_msl[0]} hPa</p>
+            <p>💧 Humidity: ${hourly.relativehumidity_2m[0]}%</p>
+            <p>👁 Visibility: ${hourly.visibility[0]/1000} km</p>
+          </div>
+        `;
+
+        // 7-day forecast
+        html += `<div class="forecast"><h3>📅 7-Day Forecast</h3><div class="forecast-grid">`;
+        for (let i = 0; i < daily.time.length; i++) {
+          html += `
+            <div class="card">
+              <strong>${new Date(daily.time[i]).toLocaleDateString(undefined, { weekday: "short" })}</strong>
+              <div class="icon">${weatherIcons[daily.weathercode[i]] || "❓"}</div>
+              <div>${daily.temperature_2m_min[i]}°C / ${daily.temperature_2m_max[i]}°C</div>
+              <div>${weatherCodes[daily.weathercode[i]] || ""}</div>
+              <div>🌅 ${new Date(daily.sunrise[i]).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+              <div>🌇 ${new Date(daily.sunset[i]).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+            </div>`;
+        }
+        html += `</div></div>`;
+
+        // Hourly forecast (next 24h)
+        html += `<div class="hourly"><h3>🕒 Next 24 Hours</h3><div class="hourly-grid">`;
+        for (let i = 0; i < 24; i++) {
+          html += `
+            <div class="card">
+              <strong>${new Date(hourly.time[i]).getHours()}:00</strong>
+              <div class="icon">${weatherIcons[hourly.weathercode[i]] || "❓"}</div>
+              <div>${hourly.temperature_2m[i]}°C</div>
+              <div>${weatherCodes[hourly.weathercode[i]] || ""}</div>
+            </div>`;
+        }
+        html += `</div></div>`;
+
+        resultDiv.innerHTML = html;
+      } catch (err) {
+        console.error(err);
+        resultDiv.innerHTML = "<p>❌ Error fetching weather data. Try again later.</p>";
+      }
+    }
+  </script>
+</body>
+</html>
