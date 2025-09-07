@@ -85,6 +85,7 @@
     <div style="text-align:center;">
       <input type="text" id="city" placeholder="Enter city">
       <button onclick="getWeather()">Search</button>
+      <button onclick="getLocationWeather()">📍 My Location</button>
     </div>
     <div id="result"></div>
   </div>
@@ -105,13 +106,33 @@
 
     async function getWeather() {
       const city = document.getElementById("city").value.trim();
+      fetchWeatherByCity(city);
+    }
+
+    async function getLocationWeather() {
+      const resultDiv = document.getElementById("result");
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            const { latitude, longitude } = position.coords;
+            fetchWeatherByCoords(latitude, longitude);
+          },
+          (error) => {
+            resultDiv.innerHTML = "<p>❌ Unable to get location. Please allow location access.</p>";
+          }
+        );
+      } else {
+        resultDiv.innerHTML = "<p>❌ Geolocation is not supported by your browser.</p>";
+      }
+    }
+
+    async function fetchWeatherByCity(city) {
       const resultDiv = document.getElementById("result");
       if (!city) {
         resultDiv.innerHTML = "<p>Please enter a city name.</p>";
         return;
       }
       try {
-        // Get coordinates
         const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}`);
         const geoData = await geoRes.json();
         if (!geoData.results || geoData.results.length === 0) {
@@ -119,15 +140,25 @@
           return;
         }
         const { latitude, longitude, name, country } = geoData.results[0];
+        fetchWeatherByCoords(latitude, longitude, name, country);
+      } catch (err) {
+        console.error(err);
+        resultDiv.innerHTML = "<p>❌ Error fetching city data.</p>";
+      }
+    }
 
-        // Get weather data
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&hourly=temperature_2m,weathercode,relativehumidity_2m,pressure_msl,visibility&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto`;
+    async function fetchWeatherByCoords(lat, lon, cityName=null, countryName=null) {
+      const resultDiv = document.getElementById("result");
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,weathercode,relativehumidity_2m,pressure_msl,visibility&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset&timezone=auto`;
         const res = await fetch(url);
         const data = await res.json();
-
         const current = data.current_weather;
         const daily = data.daily;
         const hourly = data.hourly;
+
+        const name = cityName || `Lat: ${lat.toFixed(2)}`;
+        const country = countryName || `Lon: ${lon.toFixed(2)}`;
 
         // Current weather
         let html = `
@@ -138,7 +169,7 @@
             <p>💨 Wind: ${current.windspeed} km/h</p>
             <p>🌡 Pressure: ${hourly.pressure_msl[0]} hPa</p>
             <p>💧 Humidity: ${hourly.relativehumidity_2m[0]}%</p>
-            <p>👁 Visibility: ${hourly.visibility[0]/1000} km</p>
+            <p>👁 Visibility: ${(hourly.visibility[0]/1000).toFixed(1)} km</p>
           </div>
         `;
 
